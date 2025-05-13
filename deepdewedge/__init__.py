@@ -1,8 +1,8 @@
 # **************************************************************************
 # *
-# * Authors:     you (you@yourinstitution.email)
+# * Authors:     Scipion Team (scipion@cnb.csic.es)
 # *
-# * your institution
+# * National Center of Biotechnology, CSIC, Spain
 # *
 # * This program is free software; you can redistribute it and/or modify
 # * it under the terms of the GNU General Public License as published by
@@ -26,9 +26,10 @@
 
 import pwem
 import os
+from pyworkflow import join, VarTypes
 from pyworkflow.utils import Environ
 from deepdewedge.constants import DEEPDEWEDGE_ENV_ACTIVATION, DEFAULT_ACTIVATION_CMD, DEEPDEWEDGE_ENV_NAME, \
-    DEEPDEWEDGE_DEFAULT_VERSION, DEEPDEWEDGE_HOME, DEEPDEWEDGE_CUDA_LIB, DEEPDEWEDGE
+    DEEPDEWEDGE_DEFAULT_VERSION, DEEPDEWEDGE_HOME, DEEPDEWEDGE_CUDA_LIB, DEEPDEWEDGE, DEEPDEWEDGE_SOURCE_DIR
 
 _logo = "icon.png"
 _references = ['Wiedemann2024']
@@ -41,7 +42,9 @@ class Plugin(pwem.Plugin):
 
     @classmethod
     def _defineVariables(cls):
-        # DEEPDEWEDGE does NOT need EmVar because it uses a conda environment.
+        cls._defineEmVar(DEEPDEWEDGE_HOME, f'{DEEPDEWEDGE}-{DEEPDEWEDGE_DEFAULT_VERSION}',
+                         description="Root folder where DeepDeWedge was cloned.",
+                         var_type=VarTypes.FOLDER)
         cls._defineVar(DEEPDEWEDGE_ENV_ACTIVATION, DEFAULT_ACTIVATION_CMD)
         cls._defineVar(DEEPDEWEDGE_CUDA_LIB, pwem.Config.CUDA_LIB)
 
@@ -67,21 +70,27 @@ class Plugin(pwem.Plugin):
     def defineBinaries(cls, env):
         DEEPDEWEDGE_INSTALLED = '%s_%s_installed' % (DEEPDEWEDGE, DEEPDEWEDGE_DEFAULT_VERSION)
         installationCmd = cls.getCondaActivationCmd()
-        # try to get CONDA activation command
+        ddwHomeDir = cls.getHome(DEEPDEWEDGE_SOURCE_DIR)
+        requirementsFile = join(ddwHomeDir, 'requirements.txt')
         # Create the environment
-        installationCmd += ' git clone https://github.com/MLI-lab/DeepDeWedge && '
-        installationCmd += 'conda create -y -n %s python=3.10.13 pip=23.2.1 -c conda-forge && ' % DEEPDEWEDGE_ENV_NAME
+        installationCmd += 'git clone https://github.com/MLI-lab/DeepDeWedge && '
+        installationCmd += (f'conda create -y -n {DEEPDEWEDGE_ENV_NAME} '
+                            f'-c conda-forge -c pytorch -c nvidia '
+                            f'python=3.10.13 '
+                            f'pip=23.2.1 '
+                            f'pytorch==2.2.0 '
+                            f'pytorch-cuda=11.8 && '
+                            f'conda activate {DEEPDEWEDGE_ENV_NAME} && '
+                            f'pip install -r {requirementsFile} && '
+                            f'pip install {ddwHomeDir} && ')
 
-        # Activate new the environment
-        installationCmd += 'conda activate %s && ' % DEEPDEWEDGE_ENV_NAME
-
-        # Install the rest of dependencies
-        installationCmd += 'conda install pytorch==2.2.0 pytorch-cuda=11.8 -c pytorch -c nvidia && '
-        installationCmd += 'cd /home/vilas/software/software/em/deepdewedge-0.3.0/DeepDeWedge && '
-        installationCmd += 'pip install -r requirements.txt && '
-
-        # Install deepdewedge
-        installationCmd += 'pip install . && '
+        # # Install the rest of dependencies
+        # installationCmd += 'conda install   && '
+        # installationCmd += 'cd /home/vilas/software/software/em/deepdewedge-0.3.0/DeepDeWedge && '
+        # installationCmd += 'pip install -r requirements.txt && '
+        #
+        # # Install deepdewedge
+        # installationCmd += 'pip install . && '
 
         # Flag installation finished
         installationCmd += 'touch %s' % DEEPDEWEDGE_INSTALLED
